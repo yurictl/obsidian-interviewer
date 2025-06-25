@@ -6,3 +6,156 @@ available in the app when your plugin is enabled.
 If your plugin does not need CSS, delete this file.
 
 */
+
+/* Question container styles */
+.question-container {
+    position: relative;
+    margin: 10px 0;
+    padding: 10px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+}
+
+/* Question text styles */
+.question-text {
+    margin-bottom: 10px;
+}
+
+/* Button container styles */
+.button-container {
+    display: flex;
+    gap: 10px;
+    margin-top: 5px;
+}
+
+/* Button styles */
+.question-button {
+    padding: 4px 8px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    background-color: var(--background-primary);
+    cursor: pointer;
+    font-size: 0.9em;
+}
+
+.question-button:hover {
+    background-color: var(--background-modifier-hover);
+}
+
+/* Tooltip styles */
+.tooltip {
+    position: absolute;
+    background-color: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    padding: 10px;
+    z-index: 1000;
+    max-width: 400px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    display: none;
+}
+
+.tooltip.visible {
+    display: block;
+}
+
+/* Callout styles */
+.callout[data-callout="question"] {
+    --callout-color: 100, 100, 100;
+    --callout-icon: lucide-help-circle;
+    margin: 1em 0;
+    border-radius: 4px;
+}
+
+/* Style for questions with comments */
+.callout[data-callout="question"].has-comment {
+    --callout-color: 0, 150, 0;
+    background-color: rgba(0, 150, 0, 0.1);
+    border-left: 4px solid rgb(0, 150, 0);
+}
+
+/* Style for questions without comments */
+.callout[data-callout="question"].no-comment {
+    --callout-color: 0, 120, 200;
+    background-color: rgba(0, 120, 200, 0.1);
+    border-left: 4px solid rgb(0, 120, 200);
+}
+
+.callout[data-callout="question"] .callout-title {
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-weight: bold;
+}
+
+.callout[data-callout="question"].has-comment .callout-title {
+    color: rgb(0, 150, 0);
+}
+
+.callout[data-callout="question"].no-comment .callout-title {
+    color: rgb(0, 120, 200);
+}
+
+.callout[data-callout="question"] .callout-content {
+    padding: 10px;
+    margin-top: 5px;
+    border-top: 1px solid var(--background-modifier-border);
+}
+
+.callout[data-callout="question"].has-comment .callout-content {
+    background-color: rgba(0, 150, 0, 0.05);
+}
+
+.callout[data-callout="question"].no-comment .callout-content {
+    background-color: rgba(0, 120, 200, 0.05);
+}
+
+/* Button styles */
+.question-buttons {
+    display: flex;
+    gap: 8px;
+    margin-left: auto;
+    padding-left: 16px;
+}
+
+.add-candidate-answer {
+    background: transparent;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    padding: 2px 8px;
+    cursor: pointer;
+    opacity: 0.7;
+    transition: opacity 0.2s ease;
+}
+
+.add-candidate-answer:hover {
+    opacity: 1;
+    background-color: var(--background-modifier-hover);
+}
+
+.section-buttons {
+    display: inline-block;
+    margin-left: 10px;
+}
+
+.collapse-section {
+    background: none;
+    border: 1px solid var(--text-muted);
+    border-radius: 4px;
+    padding: 2px 6px;
+    cursor: pointer;
+    font-size: 14px;
+    color: var(--text-muted);
+    transition: all 0.2s ease;
+}
+
+.collapse-section:hover {
+    background: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+h2 {
+    display: flex;
+    align-items: center;
+}
