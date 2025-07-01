@@ -37,48 +37,15 @@ The plugin will be available in the Obsidian Community Plugins directory.
 ## Quick Start
 
 ### 1. Set Up Your Question Bank
-Create questions in markdown files with the `#tech_question` tag:
 
-```markdown
----
-topic: git
-tags:
-  - tech_question
----
-
-# What is Git and why is it used?
-?
-Git is a distributed version control system for tracking changes in source code.
-
-# What does git commit do?
-?
-Git commit creates a snapshot of the current state of the repository.
-```
 
 ### 2. Create an Interview
-1. Open the command palette (`Ctrl/Cmd + Shift + P`)
-2. Run "Create Interview Notes"
-3. Fill in candidate information
-4. Questions tagged with `#tech_question` will be automatically inserted
+TODO
 
 ### 3. Conduct the Interview
 - Use the ✏️ button next to each question to add candidate answers
 - Use the ✓ button to collapse completed sections
 - Add comments and observations in real-time
-
-## Question Format
-
-Questions follow a simple format:
-- **Question**: Written as a markdown heading
-- **Expected Answer**: Written after a `?` symbol
-- **Metadata**: YAML frontmatter with topic and tags
-
-Example:
-```markdown
-# What is the difference between git merge and git rebase?
-?
-Git merge creates a merge commit combining two branches, while git rebase replays commits on top of another branch.
-```
 
 ## Templates
 
@@ -109,6 +76,8 @@ You can customize the template path in plugin settings.
 - `npm run build` - Build the plugin for production
 - `npm run dev` - Build in watch mode for development
 
+Для отладки
+cp main.js manifest.json styles.css /mnt/c/my\ docs/obsidian-interviewer/.obsidian/plugins/obsidian-interviewer/
 ## Roadmap
 
 ### Upcoming Features
@@ -119,14 +88,6 @@ You can customize the template path in plugin settings.
 ## Contributing
 
 Contributions are welcome! Please feel free to submit issues and pull requests.
-
-## Support
-
-If you find this plugin helpful, consider:
-- ⭐ Starring the repository
-- 🐛 Reporting bugs
-- 💡 Suggesting new features
-- 📝 Contributing code
 
 ## License
 

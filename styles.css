@@ -85,7 +85,6 @@ If your plugin does not need CSS, delete this file.
     cursor: pointer;
     display: flex;
     align-items: center;
-    justify-content: space-between;
     font-weight: bold;
 }
 

@@ -1,10 +1,10 @@
 {
 	"id": "obsidian-interviewer",
 	"name": "Obsidian Interviewer",
-	"version": "0.1.0",
+	"version": "0.0.1",
 	"minAppVersion": "0.15.0",
 	"description": "A plugin to help conduct technical interviews by creating interview notes from templates and collecting questions from tagged notes.",
-	"author": "Yutimer",
+	"author": "Yuri Timerkhanov",
 	"authorUrl": "https://github.com/yutimer",
 	"fundingUrl": "https://obsidian.md/pricing",
 	"isDesktopOnly": false

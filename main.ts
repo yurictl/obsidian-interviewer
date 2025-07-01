@@ -4,10 +4,12 @@ import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Set
 
 interface InterviewerSettings {
 	templatePath: string;
+	interviewFolder: string;
 }
 
 const DEFAULT_SETTINGS: InterviewerSettings = {
-	templatePath: 'templates/interview.md'
+	templatePath: 'templates/interview.md',
+	interviewFolder: '/' // Default in vault root
 }
 
 export default class InterviewerPlugin extends Plugin {
@@ -18,7 +20,9 @@ export default class InterviewerPlugin extends Plugin {
 
 		// Register view extension to add buttons
 		this.registerMarkdownPostProcessor((element, context) => {
-			const questions = element.querySelectorAll('.callout[data-callout="question"]');
+			// Look for questions in both formats: h3 headers and callout blocks
+			const h3Questions = element.querySelectorAll('h3');
+			const callouts = element.querySelectorAll('.callout');
 			const sections = element.querySelectorAll('h2');
 			
 			// Add buttons to sections
@@ -59,9 +63,14 @@ export default class InterviewerPlugin extends Plugin {
 					let inSection = false;
 					let newContent = [];
 					let currentQuestion = '';
+					let currentDifficulty = '';
+					let currentAnswer = '';
+					let currentCandidateAnswer = '';
 					let hasAnswer = false;
 					let questionLines = [];
 					let inQuestionBlock = false;
+					let inCandidateBlock = false;
+					let sectionQuestions: Array<{question: string, answer: string, candidateAnswer: string, difficulty: string}> = [];
 
 					for (let i = 0; i < lines.length; i++) {
 						const line = lines[i];
@@ -92,50 +101,107 @@ export default class InterviewerPlugin extends Plugin {
 							continue;
 						}
 
-						// Process questions in the section
-						if (trimmedLine.includes('> [!question]-')) {
-							// Process previous question if exists
-							if (currentQuestion && hasAnswer) {
-								console.log('Adding previous question:', currentQuestion);
-								// Add question without callout syntax
-								newContent.push(currentQuestion);
-							}
-							// Start new question
-							const questionParts = trimmedLine.split('> [!question]-')[1].trim().split(' - ');
-							currentQuestion = questionParts[0].trim();
-							// Check if the question has a comment (indicated by -)
-							hasAnswer = questionParts.length > 1 && questionParts[1].trim() !== '';
-							if (hasAnswer) {
-								currentQuestion += ' - ' + questionParts[1].trim();
-							}
-							questionLines = [line];
-							inQuestionBlock = true;
-						} else if (inQuestionBlock && trimmedLine.startsWith('>') && !trimmedLine.includes('[!question]')) {
-							// This is an answer line - we don't need to process it anymore
-							questionLines.push(line);
-						} else if (trimmedLine === '' && inQuestionBlock) {
-							// End of question block
-							if (hasAnswer) {
-								console.log('Adding commented question:', currentQuestion);
-								// Add question without callout syntax
-								newContent.push(currentQuestion);
-							}
-							currentQuestion = '';
-							hasAnswer = false;
-							questionLines = [];
-							inQuestionBlock = false;
-						} else if (inQuestionBlock) {
-							questionLines.push(line);
-						} else if (!trimmedLine.startsWith('> [!question]-')) {
-							// Only add non-question lines
-							newContent.push(line);
+											// Process questions in the section using new format
+					const H3 = /^###\s+(.+?)\s+#(easy|medium|hard)\s*$/i;
+					const ANSWER = /^\?\s*$/;
+					const CANDIDATE_START = /^>\s*@candidate\s*$/;
+					const CANDIDATE_CONTENT = /^>\s*(.+)$/;
+					
+					const h3Match = H3.exec(trimmedLine);
+					if (h3Match) {
+						// Process previous question if exists
+						if (currentQuestion && hasAnswer) {
+							console.log('Adding previous question to array:', currentQuestion);
+							sectionQuestions.push({
+								question: currentQuestion,
+								answer: currentAnswer.trim(),
+								candidateAnswer: currentCandidateAnswer.trim(),
+								difficulty: currentDifficulty
+							});
 						}
+						// Start new question
+						currentQuestion = h3Match[1].trim();
+						currentDifficulty = h3Match[2].toLowerCase();
+						questionLines = [line];
+						inQuestionBlock = true;
+						hasAnswer = false;
+						currentAnswer = '';
+						currentCandidateAnswer = '';
+						inCandidateBlock = false;
+					} else if (ANSWER.test(trimmedLine)) {
+						// This is an answer marker
+						inQuestionBlock = true;
+						hasAnswer = false; // Will be set to true when we start collecting answer
+					} else if (CANDIDATE_START.test(trimmedLine)) {
+						// Start of candidate block
+						inCandidateBlock = true;
+					} else if (inCandidateBlock && CANDIDATE_CONTENT.test(trimmedLine)) {
+						// Collect candidate answer content
+						const candidateMatch = CANDIDATE_CONTENT.exec(trimmedLine);
+						if (candidateMatch) {
+							currentCandidateAnswer += candidateMatch[1] + '\n';
+						}
+					} else if (inCandidateBlock && trimmedLine === '') {
+						// End of candidate block (empty line without >)
+						inCandidateBlock = false;
+					} else if (inQuestionBlock && hasAnswer === false && trimmedLine !== '' && !inCandidateBlock) {
+						// Start collecting answer
+						hasAnswer = true;
+						currentAnswer = line;
+					} else if (inQuestionBlock && hasAnswer && trimmedLine !== '' && !inCandidateBlock) {
+						// Continue collecting answer
+						currentAnswer += '\n' + line;
+					} else if (inQuestionBlock && hasAnswer && trimmedLine === '' && !inCandidateBlock) {
+						// End of answer section
+						if (currentQuestion && hasAnswer) {
+							console.log('Adding answered question to array:', currentQuestion);
+							sectionQuestions.push({
+								question: currentQuestion,
+								answer: currentAnswer.trim(),
+								candidateAnswer: currentCandidateAnswer.trim(),
+								difficulty: currentDifficulty
+							});
+						}
+						currentQuestion = '';
+						hasAnswer = false;
+						currentAnswer = '';
+						currentCandidateAnswer = '';
+						inQuestionBlock = false;
+						inCandidateBlock = false;
+					} else if (!inQuestionBlock && !inCandidateBlock) {
+						// Only add non-question lines
+						newContent.push(line);
+					}
 					}
 
 					// Handle the last question if exists
 					if (currentQuestion && hasAnswer) {
-						console.log('Adding final question:', currentQuestion);
-						newContent.push(currentQuestion);
+						console.log('Adding final question to array:', currentQuestion);
+						sectionQuestions.push({
+							question: currentQuestion,
+							answer: currentAnswer.trim(),
+							candidateAnswer: currentCandidateAnswer.trim(),
+							difficulty: currentDifficulty
+						});
+					}
+
+					// Sort questions by difficulty: easy -> medium -> hard
+					const difficultyOrder = { easy: 1, medium: 2, hard: 3 };
+					sectionQuestions.sort((a, b) => {
+						return difficultyOrder[a.difficulty as keyof typeof difficultyOrder] - difficultyOrder[b.difficulty as keyof typeof difficultyOrder];
+					});
+
+					// Add sorted questions to new content
+					for (const q of sectionQuestions) {
+						newContent.push(`### ${q.question} #${q.difficulty}`);
+						newContent.push('?');
+						newContent.push(q.answer);
+						// Add candidate answer if it exists
+						if (q.candidateAnswer && q.candidateAnswer.trim() !== '') {
+							newContent.push('');
+							newContent.push('> @candidate');
+							newContent.push(`> ${q.candidateAnswer}`);
+						}
 					}
 
 					console.log('New content length:', newContent.length);
@@ -162,12 +228,13 @@ export default class InterviewerPlugin extends Plugin {
 				});
 			});
 			
-			questions.forEach((question) => {
-				const titleEl = question.querySelector('.callout-title');
-				if (!titleEl) return;
+			// Process h3 questions (old format)
+			h3Questions.forEach((question) => {
+				// Check if this h3 is a question (has difficulty tag)
+				const titleText = question.textContent || '';
+				if (!titleText.includes('#')) return; // Skip if no difficulty tag
 
 				// Check if question has a comment and add appropriate class
-				const titleText = titleEl.textContent || '';
 				if (titleText.includes(' - ')) {
 					question.addClass('has-comment');
 				} else {
@@ -175,7 +242,7 @@ export default class InterviewerPlugin extends Plugin {
 				}
 
 				// Create button container
-				const buttonContainer = titleEl.createEl('div', {
+				const buttonContainer = question.createEl('div', {
 					cls: 'question-buttons'
 				});
 
@@ -195,41 +262,162 @@ export default class InterviewerPlugin extends Plugin {
 					const content = await this.app.vault.read(file);
 					const lines = content.split('\n');
 					
-					// Get the question text from the title element and create search patterns
-					const displayedQuestion = titleEl.textContent?.split('?')[0].trim() || '';
+					// Get the question text from the question element
+					const displayedQuestion = question.textContent?.trim() || '';
 					console.log('Question as displayed:', displayedQuestion);
 					
-					// Find the matching line and any existing answer
-					let lineIndex = -1;
+					// Find the matching question in new format and any existing answer
+					let questionLineIndex = -1;
+					let answerLineIndex = -1;
 					let existingAnswer = '';
+					const H3 = /^###\s+(.+?)\s+#(easy|medium|hard)\s*$/i;
+					const ANSWER = /^\?\s*$/;
 
 					for (let i = 0; i < lines.length; i++) {
 						const line = lines[i];
-						console.log('Checking line:', line);
 						
-						// Remove markdown formatting for comparison
-						const cleanLine = line.replace(/`([^`]+)`/g, '$1')  // Remove backticks but keep content
-											.replace(/\*\*([^\*]+)\*\*/g, '$1')  // Remove bold
-											.replace(/\*([^\*]+)\*/g, '$1')  // Remove italic
-											.replace(/\_([^\_]+)\_/g, '$1'); // Remove underscore emphasis
-						
-						// Also clean the displayed question for comparison
-						const cleanQuestion = displayedQuestion.replace(/`([^`]+)`/g, '$1')
-															 .replace(/\*\*([^\*]+)\*\*/g, '$1')
-															 .replace(/\*([^\*]+)\*/g, '$1')
-															 .replace(/\_([^\_]+)\_/g, '$1');
-						
-						console.log('Clean line:', cleanLine);
-						console.log('Clean question:', cleanQuestion);
-						
-						if (cleanLine.includes(cleanQuestion)) {
-							lineIndex = i;
+						// Look for the question header line
+						const h3Match = H3.exec(line);
+						if (h3Match && h3Match[1].trim() === displayedQuestion.replace(/^[🟢🟡🔴❓]\s*/, '')) {
+							questionLineIndex = i;
 							console.log('Found question at line:', i);
 							
-							// Check for existing answer
-							const answerMatch = line.match(/\? - (.*?)$/);
-							if (answerMatch) {
-								existingAnswer = answerMatch[1];
+							// Look for answer marker and content
+							if (i + 1 < lines.length && ANSWER.test(lines[i + 1])) {
+								// Start collecting answer from the next line
+								let answerStart = i + 2;
+								let answerLines = [];
+								
+								for (let j = answerStart; j < lines.length; j++) {
+									const answerLine = lines[j];
+									// Stop if we hit another question or section
+									if (H3.test(answerLine) || answerLine.trim().startsWith('## ')) {
+										break;
+									}
+									if (answerLine.trim() !== '') {
+										answerLines.push(answerLine);
+									}
+								}
+								
+								if (answerLines.length > 0) {
+									answerLineIndex = answerStart;
+									existingAnswer = answerLines.join('\n');
+									console.log('Found existing answer:', existingAnswer);
+								}
+							}
+							break;
+						}
+					}
+
+					const modal = new CandidateAnswerModal(this.app, async (result) => {
+						if (result) {
+							console.log('New answer:', result);
+							console.log('Question line index:', questionLineIndex);
+							
+							if (questionLineIndex !== -1) {
+								const currentContent = await this.app.vault.read(file);
+								const currentLines = currentContent.split('\n');
+								
+								// If there's already an answer, replace it
+								if (answerLineIndex !== -1) {
+									// Remove existing answer lines
+									let linesToRemove = 0;
+									for (let j = answerLineIndex; j < currentLines.length; j++) {
+										const line = currentLines[j];
+										if (H3.test(line) || line.trim().startsWith('## ')) {
+											break;
+										}
+										linesToRemove++;
+									}
+									currentLines.splice(answerLineIndex, linesToRemove, result);
+								} else {
+									// Add new answer after the question and ? marker
+									currentLines.splice(questionLineIndex + 2, 0, result);
+								}
+								
+								console.log('Updated lines:', currentLines.slice(questionLineIndex, questionLineIndex + 3));
+								await this.app.vault.modify(file, currentLines.join('\n'));
+								new Notice('Answer updated');
+							} else {
+								new Notice('Could not find the question to update');
+							}
+						}
+					}, existingAnswer);
+					modal.open();
+				});
+			});
+
+			// Process callout questions (new format)
+			callouts.forEach((callout) => {
+				// Check if this is a question callout
+				const calloutTitle = callout.querySelector('.callout-title');
+				if (!calloutTitle) return;
+				
+				const titleText = calloutTitle.textContent || '';
+				// Check if it's a question callout with difficulty emoji
+				if (!titleText.includes('🟢') && !titleText.includes('🟡') && !titleText.includes('🔴') && !titleText.includes('❓')) {
+					return;
+				}
+
+				// Create button container
+				const buttonContainer = calloutTitle.createEl('div', {
+					cls: 'question-buttons'
+				});
+
+				// Add button for candidate's answer
+				const addAnswerBtn = buttonContainer.createEl('button', {
+					cls: 'add-candidate-answer',
+					text: '✏️'
+				});
+
+				addAnswerBtn.addEventListener('click', async (event) => {
+					event.stopPropagation(); // Prevent callout from collapsing
+					
+					// Get current file content
+					const file = this.app.workspace.getActiveFile();
+					if (!file) return;
+
+					const content = await this.app.vault.read(file);
+					const lines = content.split('\n');
+					
+					// Get the question text from the callout title (remove emoji)
+					const displayedQuestion = titleText.replace(/^[🟢🟡🔴❓]\s*/, '').trim();
+					console.log('Question as displayed:', displayedQuestion);
+					
+					// Find the matching question in callout format and any existing answer
+					let questionLineIndex = -1;
+					let answerLineIndex = -1;
+					let existingAnswer = '';
+					const CALLOUT = /^>\s*\[!question\]-\s*[🟢🟡🔴❓]\s*(.+)$/i;
+					const CALLOUT_CONTENT = /^>\s*(.+)$/;
+
+					for (let i = 0; i < lines.length; i++) {
+						const line = lines[i];
+						
+						// Look for the question callout line
+						const calloutMatch = CALLOUT.exec(line);
+						if (calloutMatch && calloutMatch[1].trim() === displayedQuestion) {
+							questionLineIndex = i;
+							console.log('Found question callout at line:', i);
+							
+							// Look for answer content in subsequent callout lines
+							let answerLines = [];
+							for (let j = i + 1; j < lines.length; j++) {
+								const answerLine = lines[j];
+								// Stop if we hit another callout or section
+								if (CALLOUT.test(answerLine) || answerLine.trim().startsWith('## ')) {
+									break;
+								}
+								// Check if it's callout content
+								const contentMatch = CALLOUT_CONTENT.exec(answerLine);
+								if (contentMatch && contentMatch[1].trim() !== '') {
+									answerLines.push(contentMatch[1]);
+								}
+							}
+							
+							if (answerLines.length > 0) {
+								answerLineIndex = i + 1;
+								existingAnswer = answerLines.join('\n');
 								console.log('Found existing answer:', existingAnswer);
 							}
 							break;
@@ -239,26 +427,34 @@ export default class InterviewerPlugin extends Plugin {
 					const modal = new CandidateAnswerModal(this.app, async (result) => {
 						if (result) {
 							console.log('New answer:', result);
-							console.log('Line index:', lineIndex);
+							console.log('Question line index:', questionLineIndex);
 							
-							if (lineIndex !== -1) {
+							if (questionLineIndex !== -1) {
 								const currentContent = await this.app.vault.read(file);
 								const currentLines = currentContent.split('\n');
-								const currentLine = currentLines[lineIndex];
 								
 								// If there's already an answer, replace it
-								if (currentLine.includes(' - ')) {
-									currentLines[lineIndex] = currentLine.replace(/ - .*$/, ` - ${result}`);
+								if (answerLineIndex !== -1) {
+									// Remove existing answer lines
+									let linesToRemove = 0;
+									for (let j = answerLineIndex; j < currentLines.length; j++) {
+										const line = currentLines[j];
+										if (CALLOUT.test(line) || line.trim().startsWith('## ')) {
+											break;
+										}
+										linesToRemove++;
+									}
+									currentLines.splice(answerLineIndex, linesToRemove, `> ${result}`);
 								} else {
-									// Add new answer
-									currentLines[lineIndex] = `${currentLine.trim()} - ${result}`;
+									// Add new answer after the question callout
+									currentLines.splice(questionLineIndex + 1, 0, `> ${result}`);
 								}
 								
-								console.log('Updated line:', currentLines[lineIndex]);
+								console.log('Updated lines:', currentLines.slice(questionLineIndex, questionLineIndex + 3));
 								await this.app.vault.modify(file, currentLines.join('\n'));
 								new Notice('Answer updated');
 							} else {
-								new Notice('Could not find the question line to update');
+								new Notice('Could not find the question to update');
 							}
 						}
 					}, existingAnswer);
@@ -299,34 +495,10 @@ export default class InterviewerPlugin extends Plugin {
 
 	async createInterviewNotes() {
 		try {
-			// Get all files with #tech_question tag
-			const files = this.app.vault.getMarkdownFiles();
-			console.log('All markdown files:', files.map(f => f.path));
-			
-			const questionFiles = files.filter(file => {
-				// Skip template file
-				if (file.path === this.settings.templatePath) {
-					return false;
-				}
-				
-				// Check for tag in frontmatter
-				const cache = this.app.metadataCache.getFileCache(file);
-				const frontmatter = cache?.frontmatter;
-				console.log('Checking file:', file.path, 'Frontmatter:', frontmatter);
-				
-				return frontmatter?.tags?.includes('tech_question');
-			});
-
-			console.log('Found question files:', questionFiles.map(f => f.path));
-
-			if (questionFiles.length === 0) {
-				new Notice('No files with tech_question tag found');
-				return;
-			}
-
 			// Create new file
 			const date = new Date().toISOString().split('T')[0];
-			const newFileName = `Interviews/Interview ${date}.md`;
+			const folder = this.settings.interviewFolder.endsWith('/') ? this.settings.interviewFolder : this.settings.interviewFolder + '/';
+			const newFileName = `${folder}Interview ${date}.md`;
 			
 			// Get template content
 			let content = '';
@@ -339,85 +511,44 @@ export default class InterviewerPlugin extends Plugin {
 				console.log('Template content:', content);
 			}
 
-			// Collect all questions
-			let allQuestions = '';
-			for (const file of questionFiles) {
-				const fileContent = await this.app.vault.read(file);
-				const title = file.basename;
-				console.log('Processing file:', file.path);
+			// Replace date placeholder
+			content = content.replace('{{date}}', date);
+
+			// Process Markdown links in the template and add questions after them
+			const linkRegex = /\[\[([^\]]+)\]\]/g;
+			let match;
+			let processedContent = content;
+
+			while ((match = linkRegex.exec(content)) !== null) {
+				const linkText = match[1];
+				const fullMatch = match[0];
 				
-				// Add section header
-				allQuestions += `\n## ${title}\n`;
+				console.log('Found link:', fullMatch, 'Link text:', linkText);
 				
-				// Add questions
-				const lines = fileContent.split('\n');
-				let inFrontmatter = false;
-				let currentQuestion = '';
-				let currentAnswer = '';
-				let isAnswer = false;
+				// Try to find the file by name
+				const files = this.app.vault.getMarkdownFiles();
+				const targetFile = files.find(file => {
+					// Check if the filename matches (case-insensitive)
+					return file.basename.toLowerCase() === linkText.toLowerCase();
+				});
 				
-				for (const line of lines) {
-					// Skip frontmatter
-					if (line.trim() === '---') {
-						inFrontmatter = !inFrontmatter;
-						continue;
-					}
-					if (inFrontmatter) {
-						continue;
-					}
+				if (targetFile) {
+					console.log('Found target file:', targetFile.path);
 					
-					// Skip tags
-					if (line.trim().startsWith('@')) {
-						continue;
-					}
+					// Extract questions from the file
+					const questionsContent = await this.extractQuestionsFromFile(targetFile);
 					
-					// If we're in an answer section, collect answer until we hit an empty line
-					if (isAnswer) {
-						if (!line.trim()) {
-							isAnswer = false;
-							// Add the question with interactive elements
-							allQuestions += this.createInteractiveQuestion(currentQuestion, currentAnswer);
-							currentQuestion = '';
-							currentAnswer = '';
-						} else {
-							currentAnswer += line + '\n';
-						}
-						continue;
-					}
-					
-					// If line starts with #, it's a question
-					if (line.trim().startsWith('#')) {
-						// If we have a previous question, add it
-						if (currentQuestion) {
-							allQuestions += this.createInteractiveQuestion(currentQuestion, currentAnswer);
-							currentQuestion = '';
-							currentAnswer = '';
-						}
-						// Remove the # and any extra spaces
-						currentQuestion = line.trim().replace(/^#+\s*/, '');
-					}
-					// If we hit a question mark, start collecting answer
-					else if (line.trim() === '?') {
-						isAnswer = true;
-					}
-				}
-				
-				// Add the last question if exists
-				if (currentQuestion) {
-					allQuestions += this.createInteractiveQuestion(currentQuestion, currentAnswer);
+					// Add questions after the link (not replace it)
+					processedContent = processedContent.replace(fullMatch, fullMatch + '\n\n' + questionsContent);
+				} else {
+					console.log('Could not find file for link:', linkText);
 				}
 			}
 
-			// Insert questions into template
-			content = content.replace(
-				'// Questions will be automatically inserted here from files tagged with #tech_question',
-				allQuestions.trim()
-			);
-
-			console.log('Final content:', content);
+			console.log('Final content:', processedContent);
 
 			// Create new file
-			const newFile = await this.app.vault.create(newFileName, content);
+			const newFile = await this.app.vault.create(newFileName, processedContent);
 			new Notice(`Created new interview notes: ${newFileName}`);
 			
 			// Open the new file
@@ -428,12 +559,163 @@ export default class InterviewerPlugin extends Plugin {
 		}
 	}
 
-	private createInteractiveQuestion(question: string, answer: string): string {
-		// Use Obsidian's callout syntax for questions
-		return `
-> [!question]- ${question}
-> ${answer}
-`;
+	private async extractQuestionsFromFile(file: TFile): Promise<string> {
+		const fileContent = await this.app.vault.read(file);
+		const lines = fileContent.split('\n');
+		let inFrontmatter = false;
+		let currentQuestion = '';
+		let currentDifficulty = '';
+		let currentAnswer = '';
+		let currentCandidateAnswer = '';
+		let isAnswer = false;
+		let inCandidateBlock = false;
+		let questions: Array<{question: string, answer: string, candidateAnswer: string, difficulty: string}> = [];
+		
+		// Regex patterns for the new format
+		const H3 = /^###\s+(.+?)\s+#(easy|medium|hard)\s*$/i;
+		const ANSWER = /^\?\s*$/;
+		const CANDIDATE_START = /^>\s*@candidate\s*$/;
+		const CANDIDATE_CONTENT = /^>\s*(.+)$/;
+		
+		for (let i = 0; i < lines.length; i++) {
+			const line = lines[i];
+			const trimmedLine = line.trim();
+			
+			// Skip frontmatter
+			if (trimmedLine === '---') {
+				inFrontmatter = !inFrontmatter;
+				continue;
+			}
+			if (inFrontmatter) {
+				continue;
+			}
+			
+			// Check for new question header (### format)
+			const h3Match = H3.exec(line);
+			if (h3Match) {
+				// If we have a previous question, add it to the array
+				if (currentQuestion) {
+					questions.push({
+						question: currentQuestion,
+						answer: currentAnswer.trim(),
+						candidateAnswer: currentCandidateAnswer.trim(),
+						difficulty: currentDifficulty
+					});
+					currentQuestion = '';
+					currentAnswer = '';
+					currentCandidateAnswer = '';
+					currentDifficulty = '';
+				}
+				// Extract question and difficulty
+				currentQuestion = h3Match[1].trim();
+				currentDifficulty = h3Match[2].toLowerCase();
+				isAnswer = false;
+				inCandidateBlock = false;
+				continue;
+			}
+			
+			// Check for answer marker
+			if (ANSWER.test(line)) {
+				isAnswer = true;
+				continue;
+			}
+			
+			// Check for candidate block start
+			if (CANDIDATE_START.test(line)) {
+				inCandidateBlock = true;
+				continue;
+			}
+			
+			// Handle candidate block content
+			if (inCandidateBlock) {
+				const candidateMatch = CANDIDATE_CONTENT.exec(line);
+				if (candidateMatch) {
+					currentCandidateAnswer += candidateMatch[1] + '\n';
+				} else if (trimmedLine === '') {
+					// End of candidate block (empty line without >)
+					inCandidateBlock = false;
+				}
+				continue;
+			}
+			
+			// If we're in an answer section, collect answer until we hit another ### header or candidate block
+			if (isAnswer && !inCandidateBlock) {
+				// Check if we hit another question header or candidate block
+				if (H3.test(line) || CANDIDATE_START.test(line)) {
+					// Add the previous question to the array and start new one
+					questions.push({
+						question: currentQuestion,
+						answer: currentAnswer.trim(),
+						candidateAnswer: currentCandidateAnswer.trim(),
+						difficulty: currentDifficulty
+					});
+					
+					// Parse the new header if it's a question
+					if (H3.test(line)) {
+						const newH3Match = H3.exec(line);
+						if (newH3Match) {
+							currentQuestion = newH3Match[1].trim();
+							currentDifficulty = newH3Match[2].toLowerCase();
+							currentAnswer = '';
+							currentCandidateAnswer = '';
+							isAnswer = false;
+						}
+					}
+					// Handle candidate block start
+					if (CANDIDATE_START.test(line)) {
+						inCandidateBlock = true;
+					}
+				} else {
+					// Continue collecting answer
+					currentAnswer += line + '\n';
+				}
+				continue;
+			}
+		}
+		
+		// Add the last question if exists
+		if (currentQuestion) {
+			questions.push({
+				question: currentQuestion,
+				answer: currentAnswer.trim(),
+				candidateAnswer: currentCandidateAnswer.trim(),
+				difficulty: currentDifficulty
+			});
+		}
+		
+		// Sort questions by difficulty: easy -> medium -> hard
+		const difficultyOrder = { easy: 1, medium: 2, hard: 3 };
+		questions.sort((a, b) => {
+			return difficultyOrder[a.difficulty as keyof typeof difficultyOrder] - difficultyOrder[b.difficulty as keyof typeof difficultyOrder];
+		});
+		
+		// Convert sorted questions back to string format
+		let questionsContent = '';
+		for (const q of questions) {
+			questionsContent += this.createInteractiveQuestion(q.question, q.answer, q.candidateAnswer, q.difficulty);
+		}
+		
+		return questionsContent.trim();
+	}
+
+	private createInteractiveQuestion(question: string, answer: string, candidateAnswer: string, difficulty: string): string {
+		// Use Obsidian's callout syntax for questions with difficulty
+		const difficultyEmoji = {
+			easy: '🟢',
+			medium: '🟡', 
+			hard: '🔴'
+		}[difficulty] || '❓';
+		
+		let result = `
+> [!question]- ${difficultyEmoji} ${question}
+> ${answer}`;
+		
+		// Add candidate answer if it exists
+		if (candidateAnswer && candidateAnswer.trim() !== '') {
+			result += `\n> @candidate\n> ${candidateAnswer}`;
+		}
+		
+		return result;
 	}
 
 	// Helper function to escape special characters for regex
@@ -465,6 +747,17 @@ class InterviewerSettingTab extends PluginSettingTab {
 				.setValue(this.plugin.settings.templatePath)
 				.onChange(async (value) => {
 					this.plugin.settings.templatePath = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Interview notes folder')
+			.setDesc('Folder (relative to vault root) where new interview notes will be created.')
+			.addText(text => text
+				.setPlaceholder('/')
+				.setValue(this.plugin.settings.interviewFolder)
+				.onChange(async (value) => {
+					this.plugin.settings.interviewFolder = value;
 					await this.plugin.saveSettings();
 				}));
 	}
@@ -524,4 +817,3 @@ class CandidateAnswerModal extends Modal {
 		contentEl.empty();
 	}
 }
-
