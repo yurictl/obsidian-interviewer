@@ -37,3 +37,8 @@
 
 ### Fixed
 - Preserve Markdown formatting when inserting candidate answers
+
+## [0.0.6] - 2025-07-11
+
+### Fixed
+- Prevent double blank lines when adding candidate answers to callout questions.

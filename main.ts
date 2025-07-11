@@ -333,8 +333,12 @@ export default class InterviewerPlugin extends Plugin {
                                                                         currentLines.splice(answerLineIndex, linesToRemove, '> @candidate', ...formatted, '');
                                                                 } else {
                                                                         // Add new answer after the question and ? marker
-                                                                        const formatted = result.split('\n').map(l => `> ${l}`);
-                                                                        currentLines.splice(questionLineIndex + 2, 0, '> @candidate', ...formatted, '');
+                                const formatted = result.split('\n').map(l => `> ${l}`);
+                                if (currentLines[questionLineIndex + 2]?.trim() === '') {
+                                        currentLines.splice(questionLineIndex + 2, 0, '> @candidate', ...formatted);
+                                } else {
+                                        currentLines.splice(questionLineIndex + 2, 0, '> @candidate', ...formatted, '');
+                                }
                                                                 }
 								
 								console.log('Updated lines:', currentLines.slice(questionLineIndex, questionLineIndex + 3));
@@ -469,8 +473,12 @@ export default class InterviewerPlugin extends Plugin {
                                                                                 }
                                                                                 insertIndex = j;
                                                                         }
-                                                                        const formatted = result.split('\n').map(l => `> ${l}`);
-                                                                        currentLines.splice(insertIndex + 1, 0, '> @candidate', ...formatted, '');
+                                const formatted = result.split('\n').map(l => `> ${l}`);
+                                if (currentLines[insertIndex + 1]?.trim() === '') {
+                                        currentLines.splice(insertIndex + 1, 0, '> @candidate', ...formatted);
+                                } else {
+                                        currentLines.splice(insertIndex + 1, 0, '> @candidate', ...formatted, '');
+                                }
                                                                 }
 								
 								console.log('Updated lines:', currentLines.slice(questionLineIndex, questionLineIndex + 3));
