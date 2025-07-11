@@ -34,3 +34,7 @@ Git is a free and open-source **distributed** VCS that tracks changes.
 ## Building
 - Run `npm run build` to generate `main.js` and validate TypeScript before submitting PRs.
 
+## Pull Requests
+- Update `docs/CHANGELOG.md` when creating PRs to document changes.
+- Follow semantic versioning (MAJOR.MINOR.PATCH) for version updates.
+
