@@ -40,7 +40,21 @@ describe('utility functions', () => {
       'medium'
     );
     expect(result).toBe(
-      '\n> [!question]- 🟡 Explain Git\n> Version control system.\n> @candidate\n> Candidate mentioned SVN too.'
+      '\n> [!question]- 🟡 Explain Git\n> Version control system.\n> @candidate\n> Candidate mentioned SVN too.\n>'
+    );
+  });
+
+  test('createInteractiveQuestion handles multiline candidate answer', () => {
+    const plugin: any = getPlugin();
+    const create = plugin['createInteractiveQuestion'] as any;
+    const result = create(
+      'Explain CI/CD',
+      'Continuous Integration and Deployment.',
+      'Line one.\nLine two.',
+      'medium'
+    );
+    expect(result).toBe(
+      '\n> [!question]- 🟡 Explain CI/CD\n> Continuous Integration and Deployment.\n> @candidate\n> Line one.\n> Line two.\n>'
     );
   });
 });

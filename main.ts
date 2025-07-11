@@ -329,11 +329,13 @@ export default class InterviewerPlugin extends Plugin {
 										}
 										linesToRemove++;
 									}
-									currentLines.splice(answerLineIndex, linesToRemove, result);
-								} else {
-									// Add new answer after the question and ? marker
-									currentLines.splice(questionLineIndex + 2, 0, result);
-								}
+                                                                        const formatted = result.split('\n').map(l => `> ${l}`);
+                                                                        currentLines.splice(answerLineIndex, linesToRemove, '> @candidate', ...formatted, '>');
+                                                                } else {
+                                                                        // Add new answer after the question and ? marker
+                                                                        const formatted = result.split('\n').map(l => `> ${l}`);
+                                                                        currentLines.splice(questionLineIndex + 2, 0, '> @candidate', ...formatted, '>');
+                                                                }
 								
 								console.log('Updated lines:', currentLines.slice(questionLineIndex, questionLineIndex + 3));
 								await this.app.vault.modify(file, currentLines.join('\n'));
@@ -454,7 +456,8 @@ export default class InterviewerPlugin extends Plugin {
                                                                                 }
                                                                                 linesToRemove++;
                                                                         }
-                                                                        currentLines.splice(answerLineIndex, linesToRemove, '> @candidate', `> ${result}`);
+                                                                        const formatted = result.split('\n').map(l => `> ${l}`);
+                                                                        currentLines.splice(answerLineIndex, linesToRemove, '> @candidate', ...formatted, '>');
                                                                 } else {
                                                                         // Add new answer after the canonical answer block
                                                                         let insertIndex = questionLineIndex;
@@ -466,7 +469,8 @@ export default class InterviewerPlugin extends Plugin {
                                                                                 }
                                                                                 insertIndex = j;
                                                                         }
-                                                                        currentLines.splice(insertIndex + 1, 0, '> @candidate', `> ${result}`);
+                                                                        const formatted = result.split('\n').map(l => `> ${l}`);
+                                                                        currentLines.splice(insertIndex + 1, 0, '> @candidate', ...formatted, '>');
                                                                 }
 								
 								console.log('Updated lines:', currentLines.slice(questionLineIndex, questionLineIndex + 3));
@@ -736,9 +740,10 @@ export default class InterviewerPlugin extends Plugin {
 > ${answer}`;
 		
 		// Add candidate answer if it exists
-		if (candidateAnswer && candidateAnswer.trim() !== '') {
-			result += `\n> @candidate\n> ${candidateAnswer}`;
-		}
+                if (candidateAnswer && candidateAnswer.trim() !== '') {
+                        const formatted = candidateAnswer.split('\n').map(l => `> ${l}`).join('\n');
+                        result += `\n> @candidate\n${formatted}\n>`;
+                }
 		
 		return result;
 	}

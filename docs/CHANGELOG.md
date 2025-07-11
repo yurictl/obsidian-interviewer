@@ -5,6 +5,16 @@
 ### Added
 - Jest-based unit tests for core utilities
 
+## [0.0.5] - 2025-07-12
+
+### Fixed
+- Preserve Markdown formatting when inserting candidate answers
+
+## [0.0.6] - 2025-07-12
+
+### Fixed
+- Ensure blank line between candidate answers and the next question
+
 
 ## [0.0.3] - 2025-07-11
 
