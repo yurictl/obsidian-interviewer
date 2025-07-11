@@ -493,12 +493,18 @@ export default class InterviewerPlugin extends Plugin {
 		await this.saveData(this.settings);
 	}
 
-	async createInterviewNotes() {
-		try {
-			// Create new file
-			const date = new Date().toISOString().split('T')[0];
-			const folder = this.settings.interviewFolder.endsWith('/') ? this.settings.interviewFolder : this.settings.interviewFolder + '/';
-			const newFileName = `${folder}Interview ${date}.md`;
+        async createInterviewNotes() {
+                try {
+                        // Create new file name and ensure the target folder exists
+                        const date = new Date().toISOString().split('T')[0];
+
+                        const folderPath = this.settings.interviewFolder.replace(/\/+$/, '');
+                        const folder = folderPath ? folderPath + '/' : '';
+                        const newFileName = `${folder}Interview ${date}.md`;
+
+                        if (folderPath && !this.app.vault.getAbstractFileByPath(folderPath)) {
+                                await this.app.vault.createFolder(folderPath);
+                        }
 			
 			// Get template content
 			let content = '';
