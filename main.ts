@@ -389,7 +389,8 @@ export default class InterviewerPlugin extends Plugin {
 					let answerLineIndex = -1;
 					let existingAnswer = '';
 					const CALLOUT = /^>\s*\[!question\]-\s*[🟢🟡🔴❓]\s*(.+)$/i;
-					const CALLOUT_CONTENT = /^>\s*(.+)$/;
+                                        const CANDIDATE_START = /^>\s*@candidate\s*$/;
+                                        const CALLOUT_CONTENT = /^>\s*(.+)$/;
 
 					for (let i = 0; i < lines.length; i++) {
 						const line = lines[i];
@@ -400,29 +401,38 @@ export default class InterviewerPlugin extends Plugin {
 							questionLineIndex = i;
 							console.log('Found question callout at line:', i);
 							
-							// Look for answer content in subsequent callout lines
-							let answerLines = [];
-							for (let j = i + 1; j < lines.length; j++) {
-								const answerLine = lines[j];
-								// Stop if we hit another callout or section
-								if (CALLOUT.test(answerLine) || answerLine.trim().startsWith('## ')) {
-									break;
-								}
-								// Check if it's callout content
-								const contentMatch = CALLOUT_CONTENT.exec(answerLine);
-								if (contentMatch && contentMatch[1].trim() !== '') {
-									answerLines.push(contentMatch[1]);
-								}
-							}
-							
-							if (answerLines.length > 0) {
-								answerLineIndex = i + 1;
-								existingAnswer = answerLines.join('\n');
-								console.log('Found existing answer:', existingAnswer);
-							}
-							break;
-						}
-					}
+                                                        // Look for candidate answer block
+                                                        let answerLines = [];
+                                                        for (let j = i + 1; j < lines.length; j++) {
+                                                                const answerLine = lines[j];
+                                                                // Stop if we hit another callout or section
+                                                                if (CALLOUT.test(answerLine) || answerLine.trim().startsWith('## ')) {
+                                                                        break;
+                                                                }
+                                                                if (CANDIDATE_START.test(answerLine)) {
+                                                                        answerLineIndex = j;
+                                                                        for (let k = j + 1; k < lines.length; k++) {
+                                                                                const candidateLine = lines[k];
+                                                                                if (CALLOUT.test(candidateLine) || candidateLine.trim().startsWith('## ') || CANDIDATE_START.test(candidateLine)) {
+                                                                                        break;
+                                                                                }
+                                                                                const contentMatch = CALLOUT_CONTENT.exec(candidateLine);
+                                                                                if (contentMatch && contentMatch[1].trim() !== '') {
+                                                                                        answerLines.push(contentMatch[1]);
+                                                                                }
+                                                                                j = k;
+                                                                        }
+                                                                        break;
+                                                                }
+                                                        }
+
+                                                        if (answerLines.length > 0) {
+                                                                existingAnswer = answerLines.join('\n');
+                                                                console.log('Found existing answer:', existingAnswer);
+                                                        }
+                                                        break;
+                                                }
+                                        }
 
 					const modal = new CandidateAnswerModal(this.app, async (result) => {
 						if (result) {
@@ -433,22 +443,31 @@ export default class InterviewerPlugin extends Plugin {
 								const currentContent = await this.app.vault.read(file);
 								const currentLines = currentContent.split('\n');
 								
-								// If there's already an answer, replace it
-								if (answerLineIndex !== -1) {
-									// Remove existing answer lines
-									let linesToRemove = 0;
-									for (let j = answerLineIndex; j < currentLines.length; j++) {
-										const line = currentLines[j];
-										if (CALLOUT.test(line) || line.trim().startsWith('## ')) {
-											break;
-										}
-										linesToRemove++;
-									}
-									currentLines.splice(answerLineIndex, linesToRemove, `> ${result}`);
-								} else {
-									// Add new answer after the question callout
-									currentLines.splice(questionLineIndex + 1, 0, `> ${result}`);
-								}
+                                                                // If there's already an answer, replace it
+                                                                if (answerLineIndex !== -1) {
+                                                                        // Remove existing candidate block
+                                                                        let linesToRemove = 0;
+                                                                        for (let j = answerLineIndex; j < currentLines.length; j++) {
+                                                                                const line = currentLines[j];
+                                                                                if (CALLOUT.test(line) || line.trim().startsWith('## ')) {
+                                                                                        break;
+                                                                                }
+                                                                                linesToRemove++;
+                                                                        }
+                                                                        currentLines.splice(answerLineIndex, linesToRemove, '> @candidate', `> ${result}`);
+                                                                } else {
+                                                                        // Add new answer after the canonical answer block
+                                                                        let insertIndex = questionLineIndex;
+                                                                        for (let j = questionLineIndex + 1; j < currentLines.length; j++) {
+                                                                                const line = currentLines[j];
+                                                                                if (CALLOUT.test(line) || line.trim().startsWith('## ')) {
+                                                                                        insertIndex = j - 1;
+                                                                                        break;
+                                                                                }
+                                                                                insertIndex = j;
+                                                                        }
+                                                                        currentLines.splice(insertIndex + 1, 0, '> @candidate', `> ${result}`);
+                                                                }
 								
 								console.log('Updated lines:', currentLines.slice(questionLineIndex, questionLineIndex + 3));
 								await this.app.vault.modify(file, currentLines.join('\n'));
