@@ -696,13 +696,13 @@ export default class InterviewerPlugin extends Plugin {
 		});
 		
 		// Convert sorted questions back to string format
-		let questionsContent = '';
-		for (const q of questions) {
-			questionsContent += this.createInteractiveQuestion(q.question, q.answer, q.candidateAnswer, q.difficulty);
-		}
-		
-		return questionsContent.trim();
-	}
+                let questionsContent = '';
+                for (const q of questions) {
+                        questionsContent += this.createInteractiveQuestion(q.question, q.answer, q.candidateAnswer, q.difficulty) + '\n\n';
+                }
+
+                return questionsContent.trim();
+        }
 
 	private createInteractiveQuestion(question: string, answer: string, candidateAnswer: string, difficulty: string): string {
 		// Use Obsidian's callout syntax for questions with difficulty
