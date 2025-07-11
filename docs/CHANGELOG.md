@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.4] - 2025-07-12
+
+### Added
+- Jest-based unit tests for core utilities
+
+
 ## [0.0.3] - 2025-07-11
 
 ### Added
