@@ -11,6 +11,12 @@ describe('utility functions', () => {
     expect(escape('a+b*c')).toBe('a\\+b\\*c');
   });
 
+  test('slugify creates kebab-case slugs', () => {
+    const plugin: any = getPlugin();
+    const slugify = plugin['slugify'] as (s: string) => string;
+    expect(slugify('What is Docker?-0')).toBe('what-is-docker-0');
+  });
+
   test('createInteractiveQuestion returns details format', () => {
     const plugin: any = getPlugin();
     const create = plugin['createInteractiveQuestion'] as (
