@@ -37,3 +37,8 @@
 
 ### Fixed
 - Preserve Markdown formatting when inserting candidate answers
+
+## [0.0.6] - 2025-07-13
+
+### Changed
+- Interview notes now render questions using HTML `<details>` blocks for better display in Obsidian.
