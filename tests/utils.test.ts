@@ -11,36 +11,47 @@ describe('utility functions', () => {
     expect(escape('a+b*c')).toBe('a\\+b\\*c');
   });
 
-  test('createInteractiveQuestion returns callout format', () => {
+  test('slugify creates kebab-case slugs', () => {
+    const plugin: any = getPlugin();
+    const slugify = plugin['slugify'] as (s: string) => string;
+    expect(slugify('What is Docker?-0')).toBe('what-is-docker-0');
+  });
+
+  test('createInteractiveQuestion returns details format', () => {
     const plugin: any = getPlugin();
     const create = plugin['createInteractiveQuestion'] as (
       q: string,
       a: string,
       ca: string,
-      diff: string
+      diff: string,
+      idx: number
     ) => string;
-    const result = create(
+    const result = create.call(
+      plugin,
       'What is Docker?',
       'Docker is a containerization technology.',
       '',
-      'easy'
+      'easy',
+      0
     );
     expect(result).toBe(
-      '\n> [!question]- 🟢 What is Docker?\n> Docker is a containerization technology.'
+      '<details class="interview-question" data-id="what-is-docker-0" data-difficulty="easy">\n  <summary>\n    <span class="q-text">What is Docker?</span>\n    <span class="badge diff-easy">easy</span>\n  </summary>\n\n  <div class="canonical-answer">\nDocker is a containerization technology.</div>\n\n  <div class="candidate-answer empty"></div>\n</details>'
     );
   });
 
   test('createInteractiveQuestion adds candidate answer when provided', () => {
     const plugin: any = getPlugin();
     const create = plugin['createInteractiveQuestion'] as any;
-    const result = create(
+    const result = create.call(
+      plugin,
       'Explain Git',
       'Version control system.',
       'Candidate mentioned SVN too.',
-      'medium'
+      'medium',
+      1
     );
     expect(result).toBe(
-      '\n> [!question]- 🟡 Explain Git\n> Version control system.\n> @candidate\n> Candidate mentioned SVN too.'
+      '<details class="interview-question" data-id="explain-git-1" data-difficulty="medium">\n  <summary>\n    <span class="q-text">Explain Git</span>\n    <span class="badge diff-medium">medium</span>\n  </summary>\n\n  <div class="canonical-answer">\nVersion control system.</div>\n\n  <div class="candidate-answer">Candidate mentioned SVN too.</div>\n</details>'
     );
   });
 });

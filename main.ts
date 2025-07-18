@@ -21,9 +21,10 @@ export default class InterviewerPlugin extends Plugin {
 		// Register view extension to add buttons
 		this.registerMarkdownPostProcessor((element, context) => {
 			// Look for questions in both formats: h3 headers and callout blocks
-			const h3Questions = element.querySelectorAll('h3');
-			const callouts = element.querySelectorAll('.callout');
-			const sections = element.querySelectorAll('h2');
+                        const h3Questions = element.querySelectorAll('h3');
+                        const callouts = element.querySelectorAll('.callout');
+                        const detailsBlocks = element.querySelectorAll('details.interview-question');
+                        const sections = element.querySelectorAll('h2');
 			
 			// Add buttons to sections
 			sections.forEach((section) => {
@@ -350,7 +351,7 @@ export default class InterviewerPlugin extends Plugin {
 			});
 
 			// Process callout questions (new format)
-			callouts.forEach((callout) => {
+                        callouts.forEach((callout) => {
 				// Check if this is a question callout
 				const calloutTitle = callout.querySelector('.callout-title');
 				if (!calloutTitle) return;
@@ -482,8 +483,53 @@ export default class InterviewerPlugin extends Plugin {
 						}
 					}, existingAnswer);
 					modal.open();
-				});
-			});
+                        });
+
+                        // Process HTML details questions (new interview format)
+                        detailsBlocks.forEach((detail) => {
+                                const summaryEl = detail.querySelector('summary');
+                                if (!summaryEl) return;
+
+                                const buttonContainer = summaryEl.createEl('div', {
+                                        cls: 'question-buttons'
+                                });
+
+                                const addAnswerBtn = buttonContainer.createEl('button', {
+                                        cls: 'add-candidate-answer',
+                                        text: '✏️'
+                                });
+
+                                addAnswerBtn.addEventListener('click', async (event) => {
+                                        event.stopPropagation();
+                                        const dataId = detail.getAttribute('data-id');
+                                        const file = this.app.workspace.getActiveFile();
+                                        if (!file || !dataId) return;
+
+                                        const content = await this.app.vault.read(file);
+                                        const start = content.indexOf(`<details class="interview-question" data-id="${dataId}"`);
+                                        if (start === -1) return;
+                                        const end = content.indexOf('</details>', start);
+                                        if (end === -1) return;
+
+                                        const block = content.slice(start, end + 10);
+                                        const match = block.match(/<div class="candidate-answer(?: empty)?">([\s\S]*?)<\/div>/);
+                                        const existingAnswer = match ? match[1].trim() : '';
+
+                                        const modal = new CandidateAnswerModal(this.app, async (result) => {
+                                                if (result !== undefined) {
+                                                        const replacement = result.trim() === ''
+                                                                ? '<div class="candidate-answer empty"></div>'
+                                                                : `<div class="candidate-answer">${result}</div>`;
+                                                        const newBlock = block.replace(/<div class="candidate-answer(?: empty)?">[\s\S]*?<\/div>/, replacement);
+                                                        const newContent = content.slice(0, start) + newBlock + content.slice(end + 10);
+                                                        await this.app.vault.modify(file, newContent);
+                                                        new Notice('Answer updated');
+                                                }
+                                        }, existingAnswer);
+                                        modal.open();
+                                });
+                        });
+                });
 		});
 
 		// Add ribbon icon
@@ -718,34 +764,40 @@ export default class InterviewerPlugin extends Plugin {
 			return difficultyOrder[a.difficulty as keyof typeof difficultyOrder] - difficultyOrder[b.difficulty as keyof typeof difficultyOrder];
 		});
 		
-		// Convert sorted questions back to string format
+                // Convert sorted questions back to string format
                 let questionsContent = '';
-                for (const q of questions) {
-                        questionsContent += this.createInteractiveQuestion(q.question, q.answer, q.candidateAnswer, q.difficulty) + '\n\n';
-                }
+                questions.forEach((q, idx) => {
+                        questionsContent += this.createInteractiveQuestion(q.question, q.answer, q.candidateAnswer, q.difficulty, idx) + '\n\n';
+                });
 
                 return questionsContent.trim();
         }
 
-	private createInteractiveQuestion(question: string, answer: string, candidateAnswer: string, difficulty: string): string {
-		// Use Obsidian's callout syntax for questions with difficulty
-		const difficultyEmoji = {
-			easy: '🟢',
-			medium: '🟡', 
-			hard: '🔴'
-		}[difficulty] || '❓';
-		
-		let result = `
-> [!question]- ${difficultyEmoji} ${question}
-> ${answer}`;
-		
-		// Add candidate answer if it exists
-		if (candidateAnswer && candidateAnswer.trim() !== '') {
-			result += `\n> @candidate\n> ${candidateAnswer}`;
-		}
-		
-		return result;
-	}
+        private createInteractiveQuestion(question: string, answer: string, candidateAnswer: string, difficulty: string, index: number): string {
+                const slug = this.slugify(`${question}-${index}`);
+
+                const badgeClass = {
+                        easy: 'diff-easy',
+                        medium: 'diff-medium',
+                        hard: 'diff-hard'
+                }[difficulty] || 'diff-easy';
+
+                const badge = `<span class="badge ${badgeClass}">${difficulty}</span>`;
+                const canonical = `\n${answer}`;
+
+                const candidate = candidateAnswer && candidateAnswer.trim() !== ''
+                        ? `<div class="candidate-answer">${candidateAnswer}</div>`
+                        : '<div class="candidate-answer empty"></div>';
+
+                return `<details class="interview-question" data-id="${slug}" data-difficulty="${difficulty}">\n  <summary>\n    <span class="q-text">${question}</span>\n    ${badge}\n  </summary>\n\n  <div class="canonical-answer">${canonical}</div>\n\n  ${candidate}\n</details>`;
+        }
+
+        private slugify(text: string): string {
+                return text
+                        .toLowerCase()
+                        .replace(/[^a-z0-9]+/g, '-')
+                        .replace(/^-+|-+$/g, '');
+        }
 
 	// Helper function to escape special characters for regex
 	private escapeRegExp(string: string): string {
