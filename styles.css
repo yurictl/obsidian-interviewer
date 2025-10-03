@@ -158,3 +158,71 @@ h2 {
     display: flex;
     align-items: center;
 }
+
+/* Interview note details block styles */
+details.interview-question {
+  border: 1px solid var(--color-base-40);
+  border-radius: 6px;
+  margin: 6px 0;
+  padding: 4px;
+}
+
+details.interview-question > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.badge {
+  font-size: 0.8em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--tag-background);
+}
+
+.diff-easy   { background-color: #81c78433; }
+.diff-medium { background-color: #ffb74d33; }
+.diff-hard   { background-color: #e5737333; }
+
+.canonical-answer   { margin: 8px 0; }
+.candidate-answer   { margin: 8px 0; font-style: italic; }
+.candidate-answer.empty { color: var(--text-faint); }
+
+/* Candidate answer block inside callout */
+/* Target blockquote that appears after canonical answer */
+.callout[data-callout="question"] blockquote {
+    margin: 12px 0 8px 0 !important;
+    padding: 12px 16px !important;
+    border-left: 4px solid var(--interactive-accent) !important;
+    background-color: rgba(var(--interactive-accent-rgb), 0.08) !important;
+    border-radius: 6px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.callout[data-callout="question"] .callout-content blockquote {
+    margin: 12px 0 8px 0 !important;
+    padding: 12px 16px !important;
+    border-left: 4px solid var(--interactive-accent) !important;
+    background-color: rgba(var(--interactive-accent-rgb), 0.08) !important;
+    border-radius: 6px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.callout[data-callout="question"] blockquote p {
+    margin: 0.5em 0 !important;
+    color: var(--text-normal);
+    font-style: italic;
+    line-height: 1.6;
+}
+
+/* Style for @candidate label - first paragraph */
+.callout[data-callout="question"] blockquote p:first-child {
+    color: var(--interactive-accent) !important;
+    font-weight: 600 !important;
+    font-style: normal !important;
+    text-transform: uppercase;
+    font-size: 0.85em;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.8em !important;
+    padding-bottom: 0.5em;
+    border-bottom: 1px solid var(--background-modifier-border);
+}
