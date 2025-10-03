@@ -23,7 +23,6 @@ export default class InterviewerPlugin extends Plugin {
 			// Look for questions in both formats: h3 headers and callout blocks
                         const h3Questions = element.querySelectorAll('h3');
                         const callouts = element.querySelectorAll('.callout');
-                        const detailsBlocks = element.querySelectorAll('details.interview-question');
                         const sections = element.querySelectorAll('h2');
 			
 			// Add buttons to sections
@@ -355,7 +354,7 @@ export default class InterviewerPlugin extends Plugin {
 				// Check if this is a question callout
 				const calloutTitle = callout.querySelector('.callout-title');
 				if (!calloutTitle) return;
-				
+
 				const titleText = calloutTitle.textContent || '';
 				// Check if it's a question callout with difficulty emoji
 				if (!titleText.includes('🟢') && !titleText.includes('🟡') && !titleText.includes('🔴') && !titleText.includes('❓')) {
@@ -375,55 +374,77 @@ export default class InterviewerPlugin extends Plugin {
 
 				addAnswerBtn.addEventListener('click', async (event) => {
 					event.stopPropagation(); // Prevent callout from collapsing
-					
+
 					// Get current file content
 					const file = this.app.workspace.getActiveFile();
 					if (!file) return;
 
 					const content = await this.app.vault.read(file);
 					const lines = content.split('\n');
-					
-					// Get the question text from the callout title (remove emoji)
-					const displayedQuestion = titleText.replace(/^[🟢🟡🔴❓]\s*/, '').trim();
+
+					// Get the question text from the callout title (remove emoji and button text)
+					const displayedQuestion = titleText.replace(/^[🟢🟡🔴❓]\s*/, '').replace('✏️', '').trim();
 					console.log('Question as displayed:', displayedQuestion);
-					
+
 					// Find the matching question in callout format and any existing answer
 					let questionLineIndex = -1;
 					let answerLineIndex = -1;
+					let answerEndIndex = -1;
 					let existingAnswer = '';
-					const CALLOUT = /^>\s*\[!question\]-\s*[🟢🟡🔴❓]\s*(.+)$/i;
-                                        const CANDIDATE_START = /^>\s*@candidate\s*$/;
-                                        const CALLOUT_CONTENT = /^>\s*(.+)$/;
+					const CALLOUT = /^>\s*\[!question\]-?\s*[🟢🟡🔴❓]\s*(.+)$/i;
+                                        const CANDIDATE_START = /^>\s*@candidate\s*$/i;
+                                        const CALLOUT_LINE = /^>\s*(.*)$/;
+					const NOT_CALLOUT = /^[^>]/;
 
 					for (let i = 0; i < lines.length; i++) {
 						const line = lines[i];
-						
+
 						// Look for the question callout line
 						const calloutMatch = CALLOUT.exec(line);
 						if (calloutMatch && calloutMatch[1].trim() === displayedQuestion) {
 							questionLineIndex = i;
 							console.log('Found question callout at line:', i);
-							
+
                                                         // Look for candidate answer block
                                                         let answerLines = [];
                                                         for (let j = i + 1; j < lines.length; j++) {
                                                                 const answerLine = lines[j];
-                                                                // Stop if we hit another callout or section
-                                                                if (CALLOUT.test(answerLine) || answerLine.trim().startsWith('## ')) {
+
+                                                                // Stop if we hit another question or section
+                                                                if (CALLOUT.exec(answerLine) || answerLine.trim().startsWith('## ') || NOT_CALLOUT.test(answerLine)) {
                                                                         break;
                                                                 }
+
                                                                 if (CANDIDATE_START.test(answerLine)) {
                                                                         answerLineIndex = j;
+                                                                        answerEndIndex = j; // Start with just the @candidate line
+
+                                                                        // Collect all lines until we leave the callout block
                                                                         for (let k = j + 1; k < lines.length; k++) {
                                                                                 const candidateLine = lines[k];
-                                                                                if (CALLOUT.test(candidateLine) || candidateLine.trim().startsWith('## ') || CANDIDATE_START.test(candidateLine)) {
+
+                                                                                // Check if we hit another question or section
+                                                                                if (CALLOUT.exec(candidateLine) || candidateLine.trim().startsWith('## ')) {
+                                                                                        // answerEndIndex is already set to last valid line
                                                                                         break;
                                                                                 }
-                                                                                const contentMatch = CALLOUT_CONTENT.exec(candidateLine);
-                                                                                if (contentMatch && contentMatch[1].trim() !== '') {
+
+                                                                                // Check if it's a non-callout line (not starting with >)
+                                                                                if (NOT_CALLOUT.test(candidateLine)) {
+                                                                                        // If it's empty, it might be between callout blocks - include it
+                                                                                        if (candidateLine.trim() === '') {
+                                                                                                answerEndIndex = k;
+                                                                                        }
+                                                                                        // Non-empty non-callout line = definitely end of block
+                                                                                        break;
+                                                                                }
+
+                                                                                // It's a callout line (starts with >)
+                                                                                answerEndIndex = k;
+                                                                                const contentMatch = CALLOUT_LINE.exec(candidateLine);
+                                                                                if (contentMatch) {
                                                                                         answerLines.push(contentMatch[1]);
                                                                                 }
-                                                                                j = k;
                                                                         }
                                                                         break;
                                                                 }
@@ -438,43 +459,67 @@ export default class InterviewerPlugin extends Plugin {
                                         }
 
 					const modal = new CandidateAnswerModal(this.app, async (result) => {
-						if (result) {
+						if (result !== null && result !== undefined) {
 							console.log('New answer:', result);
 							console.log('Question line index:', questionLineIndex);
-							
+
 							if (questionLineIndex !== -1) {
 								const currentContent = await this.app.vault.read(file);
 								const currentLines = currentContent.split('\n');
-								
+
                                                                 // If there's already an answer, replace it
                                                                 if (answerLineIndex !== -1) {
-                                                                        // Remove existing candidate block
-                                                                        let linesToRemove = 0;
-                                                                        for (let j = answerLineIndex; j < currentLines.length; j++) {
-                                                                                const line = currentLines[j];
-                                                                                if (CALLOUT.test(line) || line.trim().startsWith('## ')) {
-                                                                                        break;
+                                                                        if (result.trim() === '') {
+                                                                                // Remove the entire candidate block if answer is empty
+                                                                                // Find start of the candidate block (including separator line before @candidate)
+                                                                                let removeStart = answerLineIndex;
+
+                                                                                // Go back to find the empty ">" separator line
+                                                                                while (removeStart > 0 && currentLines[removeStart - 1].trim() === '>') {
+                                                                                        removeStart--;
                                                                                 }
-                                                                                linesToRemove++;
+
+                                                                                // Find end of the candidate block
+                                                                                let removeEnd = answerEndIndex;
+
+                                                                                // Check if there's a trailing empty line after the answer
+                                                                                if (removeEnd + 1 < currentLines.length && currentLines[removeEnd + 1].trim() === '') {
+                                                                                        removeEnd++;
+                                                                                }
+
+                                                                                // Remove from separator line through answer and trailing empty line
+                                                                                const removeCount = removeEnd - removeStart + 1;
+                                                                                currentLines.splice(removeStart, removeCount);
+                                                                        } else {
+                                                                                // Calculate lines to remove
+                                                                                let linesToRemove = answerEndIndex - answerLineIndex + 1;
+                                                                                if (answerEndIndex + 1 < currentLines.length && currentLines[answerEndIndex + 1].trim() === '') {
+                                                                                        linesToRemove++;
+                                                                                }
+
+                                                                                const formatted = result.split('\n').map(l => `> ${l}`);
+                                                                                // Replace old answer with new one and add empty line after to close callout
+                                                                                currentLines.splice(answerLineIndex, linesToRemove, '> @candidate', ...formatted, '');
                                                                         }
-                                                                        const formatted = result.split('\n').map(l => `> ${l}`);
-                                                                        currentLines.splice(answerLineIndex, linesToRemove, '> @candidate', ...formatted, '');
                                                                 } else {
                                                                         // Add new answer after the canonical answer block
-                                                                        let insertIndex = questionLineIndex;
-                                                                        for (let j = questionLineIndex + 1; j < currentLines.length; j++) {
-                                                                                const line = currentLines[j];
-                                                                                if (CALLOUT.test(line) || line.trim().startsWith('## ')) {
-                                                                                        insertIndex = j - 1;
-                                                                                        break;
+                                                                        if (result.trim() !== '') {
+                                                                                let insertIndex = questionLineIndex;
+                                                                                for (let j = questionLineIndex + 1; j < currentLines.length; j++) {
+                                                                                        const line = currentLines[j];
+                                                                                        if (CALLOUT.test(line) || line.trim().startsWith('## ') || NOT_CALLOUT.test(line)) {
+                                                                                                insertIndex = j - 1;
+                                                                                                break;
+                                                                                        }
+                                                                                        insertIndex = j;
                                                                                 }
-                                                                                insertIndex = j;
+                                                                                const formatted = result.split('\n').map(l => `> ${l}`);
+                                                                                // Add candidate answer with separator line before and empty line after to close callout
+                                                                                currentLines.splice(insertIndex + 1, 0, '>', '> @candidate', ...formatted, '');
                                                                         }
-                                                                        const formatted = result.split('\n').map(l => `> ${l}`);
-                                                                        currentLines.splice(insertIndex + 1, 0, '> @candidate', ...formatted, '');
                                                                 }
-								
-								console.log('Updated lines:', currentLines.slice(questionLineIndex, questionLineIndex + 3));
+
+								console.log('Updated lines:', currentLines.slice(questionLineIndex, Math.min(questionLineIndex + 10, currentLines.length)));
 								await this.app.vault.modify(file, currentLines.join('\n'));
 								new Notice('Answer updated');
 							} else {
@@ -484,52 +529,7 @@ export default class InterviewerPlugin extends Plugin {
 					}, existingAnswer);
 					modal.open();
                         });
-
-                        // Process HTML details questions (new interview format)
-                        detailsBlocks.forEach((detail) => {
-                                const summaryEl = detail.querySelector('summary');
-                                if (!summaryEl) return;
-
-                                const buttonContainer = summaryEl.createEl('div', {
-                                        cls: 'question-buttons'
-                                });
-
-                                const addAnswerBtn = buttonContainer.createEl('button', {
-                                        cls: 'add-candidate-answer',
-                                        text: '✏️'
-                                });
-
-                                addAnswerBtn.addEventListener('click', async (event) => {
-                                        event.stopPropagation();
-                                        const dataId = detail.getAttribute('data-id');
-                                        const file = this.app.workspace.getActiveFile();
-                                        if (!file || !dataId) return;
-
-                                        const content = await this.app.vault.read(file);
-                                        const start = content.indexOf(`<details class="interview-question" data-id="${dataId}"`);
-                                        if (start === -1) return;
-                                        const end = content.indexOf('</details>', start);
-                                        if (end === -1) return;
-
-                                        const block = content.slice(start, end + 10);
-                                        const match = block.match(/<div class="candidate-answer(?: empty)?">([\s\S]*?)<\/div>/);
-                                        const existingAnswer = match ? match[1].trim() : '';
-
-                                        const modal = new CandidateAnswerModal(this.app, async (result) => {
-                                                if (result !== undefined) {
-                                                        const replacement = result.trim() === ''
-                                                                ? '<div class="candidate-answer empty"></div>'
-                                                                : `<div class="candidate-answer">${result}</div>`;
-                                                        const newBlock = block.replace(/<div class="candidate-answer(?: empty)?">[\s\S]*?<\/div>/, replacement);
-                                                        const newContent = content.slice(0, start) + newBlock + content.slice(end + 10);
-                                                        await this.app.vault.modify(file, newContent);
-                                                        new Notice('Answer updated');
-                                                }
-                                        }, existingAnswer);
-                                        modal.open();
-                                });
-                        });
-                });
+		});
 		});
 
 		// Add ribbon icon
@@ -773,30 +773,34 @@ export default class InterviewerPlugin extends Plugin {
                 return questionsContent.trim();
         }
 
-        private createInteractiveQuestion(question: string, answer: string, candidateAnswer: string, difficulty: string, index: number): string {
-                const slug = this.slugify(`${question}-${index}`);
-
-                const badgeClass = {
-                        easy: 'diff-easy',
-                        medium: 'diff-medium',
-                        hard: 'diff-hard'
-                }[difficulty] || 'diff-easy';
-
-                const badge = `<span class="badge ${badgeClass}">${difficulty}</span>`;
-                const canonical = `\n${answer}`;
-
-                const candidate = candidateAnswer && candidateAnswer.trim() !== ''
-                        ? `<div class="candidate-answer">${candidateAnswer}</div>`
-                        : '<div class="candidate-answer empty"></div>';
-
-                return `<details class="interview-question" data-id="${slug}" data-difficulty="${difficulty}">\n  <summary>\n    <span class="q-text">${question}</span>\n    ${badge}\n  </summary>\n\n  <div class="canonical-answer">${canonical}</div>\n\n  ${candidate}\n</details>`;
-        }
-
-        private slugify(text: string): string {
+        public slugify(text: string): string {
                 return text
                         .toLowerCase()
                         .replace(/[^a-z0-9]+/g, '-')
                         .replace(/^-+|-+$/g, '');
+        }
+
+        private createInteractiveQuestion(question: string, answer: string, candidateAnswer: string, difficulty: string, index: number): string {
+                // Map difficulty to emoji
+                const difficultyEmoji = {
+                        easy: '🟢',
+                        medium: '🟡',
+                        hard: '🔴'
+                }[difficulty] || '❓';
+
+                // Format canonical answer with > prefix for callout
+                const canonicalLines = answer.split('\n').map(line => `> ${line}`).join('\n');
+
+                // Build the question callout
+                let result = `> [!question]- ${difficultyEmoji} ${question}\n${canonicalLines}`;
+
+                // Add candidate answer if exists
+                if (candidateAnswer && candidateAnswer.trim() !== '') {
+                        const candidateLines = candidateAnswer.split('\n').map(line => `> ${line}`).join('\n');
+                        result += `\n>\n> @candidate\n${candidateLines}`;
+                }
+
+                return result;
         }
 
 	// Helper function to escape special characters for regex
