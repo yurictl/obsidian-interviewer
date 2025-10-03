@@ -12,7 +12,7 @@ The command will automatically:
 - Analyze git changes (commits, diffs, file changes)
 - Determine version type (patch/minor/major) based on changes
 - Generate release description from commits and changes
-- Update CHANGELOG.md and manifest.json
+- Update docs/CHANGELOG.md and manifest.json
 - Commit and push to main
 
 ## Version Type Detection
