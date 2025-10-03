@@ -5,11 +5,13 @@ import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Set
 interface InterviewerSettings {
 	templatePath: string;
 	interviewFolder: string;
+	interviewTag: string;
 }
 
 const DEFAULT_SETTINGS: InterviewerSettings = {
 	templatePath: 'templates/interview.md',
-	interviewFolder: '/' // Default in vault root
+	interviewFolder: '/', // Default in vault root
+	interviewTag: '#interview'
 }
 
 export default class InterviewerPlugin extends Plugin {
@@ -19,9 +21,19 @@ export default class InterviewerPlugin extends Plugin {
 		await this.loadSettings();
 
 		// Register view extension to add buttons
-		this.registerMarkdownPostProcessor((element, context) => {
-			// Look for questions in both formats: h3 headers and callout blocks
-                        const h3Questions = element.querySelectorAll('h3');
+		this.registerMarkdownPostProcessor(async (element, context) => {
+			// Check if this file has the interview tag
+			const file = this.app.vault.getAbstractFileByPath(context.sourcePath);
+			if (!(file instanceof TFile)) return;
+
+			const content = await this.app.vault.read(file);
+			const tag = this.settings.interviewTag;
+
+			// Check if file contains the interview tag (in frontmatter or content)
+			if (!content.includes(tag)) return;
+
+			// Look for questions in both formats: h1 headers and callout blocks
+                        const h1Questions = element.querySelectorAll('h1');
                         const callouts = element.querySelectorAll('.callout');
                         const sections = element.querySelectorAll('h2');
 			
@@ -102,13 +114,13 @@ export default class InterviewerPlugin extends Plugin {
 						}
 
 											// Process questions in the section using new format
-					const H3 = /^###\s+(.+?)\s+#(easy|medium|hard)\s*$/i;
+					const H1 = /^#\s+(.+?)\s+#(easy|medium|hard)\s*$/i;
 					const ANSWER = /^\?\s*$/;
 					const CANDIDATE_START = /^>\s*@candidate\s*$/;
 					const CANDIDATE_CONTENT = /^>\s*(.+)$/;
-					
-					const h3Match = H3.exec(trimmedLine);
-					if (h3Match) {
+
+					const h1Match = H1.exec(trimmedLine);
+					if (h1Match) {
 						// Process previous question if exists
 						if (currentQuestion && hasAnswer) {
 							console.log('Adding previous question to array:', currentQuestion);
@@ -120,8 +132,8 @@ export default class InterviewerPlugin extends Plugin {
 							});
 						}
 						// Start new question
-						currentQuestion = h3Match[1].trim();
-						currentDifficulty = h3Match[2].toLowerCase();
+						currentQuestion = h1Match[1].trim();
+						currentDifficulty = h1Match[2].toLowerCase();
 						questionLines = [line];
 						inQuestionBlock = true;
 						hasAnswer = false;
@@ -193,7 +205,7 @@ export default class InterviewerPlugin extends Plugin {
 
 					// Add sorted questions to new content
 					for (const q of sectionQuestions) {
-						newContent.push(`### ${q.question} #${q.difficulty}`);
+						newContent.push(`# ${q.question} #${q.difficulty}`);
 						newContent.push('?');
 						newContent.push(q.answer);
 						// Add candidate answer if it exists
@@ -228,9 +240,9 @@ export default class InterviewerPlugin extends Plugin {
 				});
 			});
 			
-			// Process h3 questions (old format)
-			h3Questions.forEach((question) => {
-				// Check if this h3 is a question (has difficulty tag)
+			// Process h1 questions
+			h1Questions.forEach((question) => {
+				// Check if this h1 is a question (has difficulty tag)
 				const titleText = question.textContent || '';
 				if (!titleText.includes('#')) return; // Skip if no difficulty tag
 
@@ -270,35 +282,35 @@ export default class InterviewerPlugin extends Plugin {
 					let questionLineIndex = -1;
 					let answerLineIndex = -1;
 					let existingAnswer = '';
-					const H3 = /^###\s+(.+?)\s+#(easy|medium|hard)\s*$/i;
+					const H1 = /^#\s+(.+?)\s+#(easy|medium|hard)\s*$/i;
 					const ANSWER = /^\?\s*$/;
 
 					for (let i = 0; i < lines.length; i++) {
 						const line = lines[i];
-						
+
 						// Look for the question header line
-						const h3Match = H3.exec(line);
-						if (h3Match && h3Match[1].trim() === displayedQuestion.replace(/^[🟢🟡🔴❓]\s*/, '')) {
+						const h1Match = H1.exec(line);
+						if (h1Match && h1Match[1].trim() === displayedQuestion.replace(/^[🟢🟡🔴❓]\s*/, '')) {
 							questionLineIndex = i;
 							console.log('Found question at line:', i);
-							
+
 							// Look for answer marker and content
 							if (i + 1 < lines.length && ANSWER.test(lines[i + 1])) {
 								// Start collecting answer from the next line
 								let answerStart = i + 2;
 								let answerLines = [];
-								
+
 								for (let j = answerStart; j < lines.length; j++) {
 									const answerLine = lines[j];
 									// Stop if we hit another question or section
-									if (H3.test(answerLine) || answerLine.trim().startsWith('## ')) {
+									if (H1.test(answerLine) || answerLine.trim().startsWith('## ')) {
 										break;
 									}
 									if (answerLine.trim() !== '') {
 										answerLines.push(answerLine);
 									}
 								}
-								
+
 								if (answerLines.length > 0) {
 									answerLineIndex = answerStart;
 									existingAnswer = answerLines.join('\n');
@@ -324,7 +336,7 @@ export default class InterviewerPlugin extends Plugin {
 									let linesToRemove = 0;
 									for (let j = answerLineIndex; j < currentLines.length; j++) {
 										const line = currentLines[j];
-										if (H3.test(line) || line.trim().startsWith('## ')) {
+										if (H1.test(line) || line.trim().startsWith('## ')) {
 											break;
 										}
 										linesToRemove++;
@@ -622,6 +634,9 @@ export default class InterviewerPlugin extends Plugin {
 
 			console.log('Final content:', processedContent);
 
+			// Add interview tag at the end
+			processedContent = processedContent + '\n\n' + this.settings.interviewTag;
+
 			// Create new file
 			const newFile = await this.app.vault.create(newFileName, processedContent);
 			new Notice(`Created new interview notes: ${newFileName}`);
@@ -647,7 +662,7 @@ export default class InterviewerPlugin extends Plugin {
 		let questions: Array<{question: string, answer: string, candidateAnswer: string, difficulty: string}> = [];
 		
 		// Regex patterns for the new format
-		const H3 = /^###\s+(.+?)\s+#(easy|medium|hard)\s*$/i;
+		const H1 = /^#\s+(.+?)\s+#(easy|medium|hard)\s*$/i;
 		const ANSWER = /^\?\s*$/;
 		const CANDIDATE_START = /^>\s*@candidate\s*$/;
 		const CANDIDATE_CONTENT = /^>\s*(.+)$/;
@@ -665,9 +680,9 @@ export default class InterviewerPlugin extends Plugin {
 				continue;
 			}
 			
-			// Check for new question header (### format)
-			const h3Match = H3.exec(line);
-			if (h3Match) {
+			// Check for new question header (# format)
+			const h1Match = H1.exec(line);
+			if (h1Match) {
 				// If we have a previous question, add it to the array
 				if (currentQuestion) {
 					questions.push({
@@ -682,8 +697,8 @@ export default class InterviewerPlugin extends Plugin {
 					currentDifficulty = '';
 				}
 				// Extract question and difficulty
-				currentQuestion = h3Match[1].trim();
-				currentDifficulty = h3Match[2].toLowerCase();
+				currentQuestion = h1Match[1].trim();
+				currentDifficulty = h1Match[2].toLowerCase();
 				isAnswer = false;
 				inCandidateBlock = false;
 				continue;
@@ -713,10 +728,10 @@ export default class InterviewerPlugin extends Plugin {
 				continue;
 			}
 			
-			// If we're in an answer section, collect answer until we hit another ### header or candidate block
+			// If we're in an answer section, collect answer until we hit another # header or candidate block
 			if (isAnswer && !inCandidateBlock) {
 				// Check if we hit another question header or candidate block
-				if (H3.test(line) || CANDIDATE_START.test(line)) {
+				if (H1.test(line) || CANDIDATE_START.test(line)) {
 					// Add the previous question to the array and start new one
 					questions.push({
 						question: currentQuestion,
@@ -724,13 +739,13 @@ export default class InterviewerPlugin extends Plugin {
 						candidateAnswer: currentCandidateAnswer.trim(),
 						difficulty: currentDifficulty
 					});
-					
+
 					// Parse the new header if it's a question
-					if (H3.test(line)) {
-						const newH3Match = H3.exec(line);
-						if (newH3Match) {
-							currentQuestion = newH3Match[1].trim();
-							currentDifficulty = newH3Match[2].toLowerCase();
+					if (H1.test(line)) {
+						const newH1Match = H1.exec(line);
+						if (newH1Match) {
+							currentQuestion = newH1Match[1].trim();
+							currentDifficulty = newH1Match[2].toLowerCase();
 							currentAnswer = '';
 							currentCandidateAnswer = '';
 							isAnswer = false;
@@ -843,6 +858,17 @@ class InterviewerSettingTab extends PluginSettingTab {
 				.setValue(this.plugin.settings.interviewFolder)
 				.onChange(async (value) => {
 					this.plugin.settings.interviewFolder = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Interview tag')
+			.setDesc('Tag used to identify interview files (e.g., #interview). Interactive buttons will only appear in files with this tag.')
+			.addText(text => text
+				.setPlaceholder('#interview')
+				.setValue(this.plugin.settings.interviewTag)
+				.onChange(async (value) => {
+					this.plugin.settings.interviewTag = value;
 					await this.plugin.saveSettings();
 				}));
 	}

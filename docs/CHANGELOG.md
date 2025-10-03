@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.0] - 2025-10-03
+
+### Added
+- Interview tag setting to filter files where interactive buttons appear (default: #interview)
+- Automatic tag insertion in newly created interview files
+- UI setting in plugin settings panel to configure interview tag
+
+### Changed
+- Updated question format from h3 (`###`) to h1 (`#`) headers
+- Post-processor now only applies to files containing the interview tag
+- Question bank files updated to use new h1 format
+
 ## [0.0.1] - 2025-10-26
 
 ### Added
